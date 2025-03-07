@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ .Title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: {{ .Theme.BackgroundColor }};
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #startBtn, #stopBtn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #startBtn {
+            background-color: {{ .Theme.PrimaryColor }};
+        }
+        #startBtn:hover {
+            background-color: {{ .Theme.PrimaryColorHover }};
+        }
+        #stopBtn {
+            background-color: {{ .Theme.DangerColor }};
+            display: none;
+        }
+        #stopBtn:hover {
+            background-color: {{ .Theme.DangerColorHover }};
+        }
+        #logContainer {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 600px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+        }
+        .INFO { color: {{ .Theme.InfoColor }}; }
+        .WARN { color: {{ .Theme.WarnColor }}; }
+        .ERROR { color: {{ .Theme.ErrorColor }}; }
+        .DEBUG { color: {{ .Theme.DebugColor }}; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ .Header }}</h1>
+        <button id="startBtn">{{ .ButtonText }}</button>
+        <button id="stopBtn">Stop Log Generation</button>
+        <div id="logContainer"></div>
+    </div>
+
+    <script>
+        let ws;
+        const logContainer = document.getElementById('logContainer');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const maxLogs = {{ .MaxLogEntries }};
+
+        function connectWebSocket() {
+            ws = new WebSocket('ws://' + window.location.host + '/ws');
+            
+            ws.onmessage = function(event) {
+                const log = JSON.parse(event.data);
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry ' + log.level;
+                logEntry.textContent = `${log.timestamp} [${log.level}] ${log.service}: ${log.message}`;
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+
+                while (logContainer.children.length > maxLogs) {
+                    logContainer.removeChild(logContainer.firstChild);
+                }
+            };
+
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 1000);
+            };
+        }
+
+        startBtn.addEventListener('click', function() {
+            fetch('/start', { method: 'POST' })
+                .then(response => {
+                    if (response.ok) {
+                        startBtn.style.display = 'none';
+                        stopBtn.style.display = 'block';
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        stopBtn.addEventListener('click', function() {
+            fetch('/stop', { method: 'POST' })
+                .then(response => {
+                    if (response.ok) {
+                        stopBtn.style.display = 'none';
+                        startBtn.style.display = 'block';
+                        startBtn.disabled = false;
+                        startBtn.textContent = '{{ .ButtonText }}';
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        connectWebSocket();
+    </script>
+</body>
+</html> 
