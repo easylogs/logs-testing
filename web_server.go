@@ -6,10 +6,17 @@ import (
 	stdlog "log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+// Configuration constants
+const (
+	// Default authentication key - should be changed in production
+	defaultAuthKey = "test-auth-key"
 )
 
 var (
@@ -26,6 +33,8 @@ var (
 	// Active WebSocket connections
 	clients    = make(map[*websocket.Conn]bool)
 	clientsMux sync.Mutex
+	// Authentication key
+	authKey = defaultAuthKey
 )
 
 // Theme defines the color scheme and styling
@@ -79,8 +88,8 @@ func startWebServer() {
 	http.HandleFunc("/start", handleStart)
 	http.HandleFunc("/stop", handleStop)
 
-	fmt.Println("Web server started at http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Println("Web server started at http://localhost:8090")
+	if err := http.ListenAndServe(":8090", nil); err != nil {
 		stdlog.Fatal(err)
 	}
 }
@@ -130,9 +139,32 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// validateAuth checks if the request has a valid authentication key
+func validateAuth(r *http.Request) bool {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return false
+	}
+	
+	// Check for Bearer token
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return false
+	}
+	
+	// Validate the token
+	return parts[1] == authKey
+}
+
 func handleStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// Validate authentication for API requests
+	if r.Header.Get("Authorization") != "" && !validateAuth(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -170,6 +202,12 @@ func handleStart(w http.ResponseWriter, r *http.Request) {
 func handleStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// Validate authentication for API requests
+	if r.Header.Get("Authorization") != "" && !validateAuth(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
